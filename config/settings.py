@@ -31,4 +31,7 @@ class Settings:
     # Similarity matching
     SIMILARITY_THRESHOLD = 60  # 0-100, products above this are considered competitors
 
+    # App
+    API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+
 settings = Settings()
