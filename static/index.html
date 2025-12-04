@@ -67,6 +67,34 @@
                     <p class="text-xs text-gray-400 mt-2">Be specific! The more details, the better the search.</p>
                 </div>
 
+                <!-- Image Upload (New) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Upload Sketch/Photo (Optional)</label>
+                    <div class="flex items-center justify-center w-full">
+                        <label for="imageUpload" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition">
+                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                <i class="fas fa-cloud-upload-alt text-gray-400 text-2xl mb-2"></i>
+                                <p class="text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                                <p class="text-xs text-gray-500">SVG, PNG, JPG or GIF (MAX. 5MB)</p>
+                            </div>
+                            <input id="imageUpload" type="file" class="hidden" accept="image/*" />
+                        </label>
+                    </div>
+                    <div id="imagePreview" class="hidden mt-2 text-sm text-green-600 font-medium flex items-center">
+                        <i class="fas fa-check-circle mr-1"></i> Image selected!
+                    </div>
+                </div>
+
+                <!-- Monitoring Option (New) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Monitoring Period</label>
+                    <select id="monitorMonths" class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white">
+                        <option value="0">One-time Scan (Free)</option>
+                        <option value="1">1 Month Weekly Monitoring</option>
+                        <option value="3">3 Months Weekly Monitoring</option>
+                    </select>
+                </div>
+
                 <button type="submit" id="submitBtn"
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition transform hover:scale-[1.02] flex justify-center items-center">
                     <span>Scan Market Now</span>
@@ -117,12 +145,30 @@
         const loadingState = document.getElementById('loadingState');
         const successState = document.getElementById('successState');
         const errorState = document.getElementById('errorState');
+        const imageInput = document.getElementById('imageUpload');
+        const imagePreview = document.getElementById('imagePreview');
+
+        let base64Image = null;
+
+        // Handle Image Selection
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    base64Image = reader.result;
+                    imagePreview.classList.remove('hidden');
+                }
+                reader.readAsDataURL(file);
+            }
+        });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const email = document.getElementById('email').value;
             const description = document.getElementById('idea').value;
+            const monitorMonths = parseInt(document.getElementById('monitorMonths').value);
 
             // UI Transition: Show Loader
             form.classList.add('hidden');
@@ -130,23 +176,28 @@
             errorState.classList.add('hidden');
 
             try {
-                // Step 1: Auto-Signup (Idempotent-ish)
-                // We try to sign up. If user exists, API returns 200 (handled in backend or we ignore error)
-                // Actually our current backend returns 200 "User already exists" which is perfect.
-                const signupRes = await fetch('/auth/signup', {
+                // Step 1: Auto-Signup
+                await fetch('/auth/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
                 });
                 
-                // We don't strictly check signup success because submit might work anyway 
-                // (if user existed previously)
-                
-                // Step 2: Submit Idea
+                // Step 2: Submit Idea with Image & Monitoring
+                const payload = { 
+                    email, 
+                    description,
+                    monitor_months: monitorMonths
+                };
+
+                if (base64Image) {
+                    payload.image_base64 = base64Image;
+                }
+
                 const submitRes = await fetch('/ideas/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, description })
+                    body: JSON.stringify(payload)
                 });
 
                 if (!submitRes.ok) {
