@@ -3,36 +3,27 @@ import re
 from scrapers.base_scraper import BaseScraper
 from config.settings import settings
 
-class AliExpressScraper(BaseScraper):
+class AmazonScraper(BaseScraper):
     """
-    AliExpress scraper using Google site search via Serper API.
+    Amazon scraper using Google site search via Serper API.
 
-    Brilliant approach: Instead of fighting AliExpress's anti-bot protection,
-    we use Google's index with 'site:aliexpress.com' queries. Google has already
-    scraped AliExpress for us - we just query their index via Serper API.
-
-    Benefits:
-    - No CAPTCHA issues
-    - No Selenium complexity
-    - Reuses existing Serper infrastructure
-    - More reliable than direct scraping
-    - Faster response times
+    Finds products listed on Amazon.
     """
 
     def search(self, keywords: str) -> list:
         """
-        Search AliExpress products via Google site search.
+        Search Amazon products via Google site search.
         Returns list of products matching the base scraper format.
         """
         if not settings.SERPER_API_KEY:
-            print("AliExpress: Serper API key not configured")
+            print("Amazon: Serper API key not configured")
             return []
 
-        # Use Google site search to find AliExpress products
-        search_query = f"site:aliexpress.com {keywords}"
+        # Use Google site search to find Amazon products
+        search_query = f"site:amazon.com {keywords}"
 
         url = "https://google.serper.dev/search"
-        payload = {"q": search_query, "num": 15}  # Request more results for filtering
+        payload = {"q": search_query, "num": 15}
         headers = {
             "X-API-KEY": settings.SERPER_API_KEY,
             "Content-Type": "application/json"
@@ -42,7 +33,7 @@ class AliExpressScraper(BaseScraper):
             response = requests.post(url, json=payload, headers=headers, timeout=settings.REQUEST_TIMEOUT)
 
             if response.status_code != 200:
-                print(f"AliExpress: Serper returned status {response.status_code}")
+                print(f"Amazon: Serper returned status {response.status_code}")
                 return []
 
             data = response.json()
@@ -51,19 +42,19 @@ class AliExpressScraper(BaseScraper):
             for item in data.get("organic", []):
                 item_url = item.get("link", "")
 
-                # Only include actual product pages (contain /item/ in URL)
-                if "/item/" not in item_url.lower():
+                # Only include actual product pages (contain /dp/ or /gp/product/ in URL)
+                if not ("/dp/" in item_url.lower() or "/gp/product/" in item_url.lower()):
                     continue
 
                 title = item.get("title", "")
                 snippet = item.get("snippet", "")
 
-                # Try to extract price from snippet using regex
+                # Try to extract price from snippet
                 price = None
                 price_patterns = [
                     r'\$\s*(\d+\.?\d*)',           # $12.99
-                    r'(\d+\.?\d*)\s*USD',          # 12.99 USD
-                    r'US\s*\$\s*(\d+\.?\d*)',      # US $12.99
+                    r'(\d+\.?\d*)\s*\$',           # 12.99 $
+                    r'Price:\s*\$\s*(\d+\.?\d*)',  # Price: $12.99
                 ]
 
                 for pattern in price_patterns:
@@ -87,12 +78,12 @@ class AliExpressScraper(BaseScraper):
                     break
 
             if results:
-                print(f"AliExpress: Found {len(results)} products via Google site search")
+                print(f"Amazon: Found {len(results)} products via Google site search")
             else:
-                print("AliExpress: No product pages found in Google results")
+                print("Amazon: No product pages found in Google results")
 
             return results
 
         except Exception as e:
-            print(f"AliExpress scrape error: {e}")
+            print(f"Amazon scrape error: {e}")
             return []

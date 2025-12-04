@@ -11,13 +11,17 @@ def record_feedback(competitor_id: int, is_relevant: int, db: Session = Depends(
     """
     Simple GET endpoint so it can be clicked from an email.
     is_relevant: 1 = Yes, 0 = No
+    Returns minimal response - no popup/page to bother user
     """
     competitor = db.query(Competitor).filter(Competitor.id == competitor_id).first()
     if not competitor:
-        return {"error": "Competitor not found"}
-    
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("✓", status_code=200)
+
     competitor.is_relevant = is_relevant
     competitor.feedback_at = datetime.utcnow()
     db.commit()
-    
-    return {"message": "Feedback recorded. Thank you!", "relevant": is_relevant == 1}
+
+    # Return minimal response - just a checkmark, no JSON popup
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("✓", status_code=200)

@@ -55,25 +55,35 @@ def run_scan_for_idea(idea_id: int, db: Session):
         
         all_scrapers = scraper_registry.get_all_scrapers()
         raw_results = []
-        
-        for scraper in all_scrapers:
+
+        for scraper_name, scraper in all_scrapers:
             try:
+                print(f"Starting {scraper_name} scraper...")
                 results = scraper.search(query)
+                print(f"{scraper_name}: Found {len(results)} results")
                 # Tag results with source
                 for r in results:
-                    r['source'] = scraper.__class__.__name__
+                    r['source'] = scraper_name
                 raw_results.extend(results)
             except Exception as e:
-                logger.error(f"Scraper {scraper.__class__.__name__} failed: {e}")
+                logger.error(f"Scraper {scraper_name} failed: {e}")
+                print(f"ERROR in {scraper_name}: {e}")
 
         # 3. Filter Noise
         clean_results = matcher.filter_noise(raw_results, negative_keywords)
         logger.info(f"Filtered {len(raw_results)} results down to {len(clean_results)}")
 
+        # Limit to top 15 products to prevent long processing times
+        MAX_PRODUCTS = 15
+        if len(clean_results) > MAX_PRODUCTS:
+            logger.info(f"Limiting to {MAX_PRODUCTS} products (had {len(clean_results)})")
+            clean_results = clean_results[:MAX_PRODUCTS]
+
         # 4. Calculate Similarity & Save
         new_competitors = []
-        
-        for product in clean_results:
+        print(f"Starting similarity matching for {len(clean_results)} products...")
+
+        for i, product in enumerate(clean_results, 1):
             # Skip if URL already exists for this idea (deduplication)
             existing = db.query(Competitor).filter(
                 Competitor.idea_id == idea.id,
@@ -83,6 +93,7 @@ def run_scan_for_idea(idea_id: int, db: Session):
             if existing:
                 continue
 
+            print(f"Matching product {i}/{len(clean_results)}: {product.get('name', 'Unknown')[:50]}...")
             similarity = matcher.calculate_similarity(idea.user_description, product)
             
             if similarity.get('score', 0) >= settings.SIMILARITY_THRESHOLD:
@@ -99,23 +110,33 @@ def run_scan_for_idea(idea_id: int, db: Session):
                 db.add(competitor)
                 new_competitors.append(competitor)
         
+        print(f"Saving {len(new_competitors)} new competitors to database...")
         db.commit()
-        
+        print("Database commit complete")
+
         # 5. Notify User
         if new_competitors:
+            # Limit email to top 6 best matches (sorted by similarity score)
+            MAX_EMAIL_COMPETITORS = 6
+            top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
+
+            print(f"Preparing to send email with top {len(top_competitors)} of {len(new_competitors)} competitors...")
             # Fetch user email
             user = db.query(User).get(idea.user_id)
             if user:
                 email_service = EmailService()
-                # We need to update EmailService to accept 'to_email'
-                # For now, assuming we pass it or it uses default
+                print(f"Sending email to {user.email} with {len(top_competitors)} competitors...")
                 email_service.send_alert(
                     to_email=user.email,
                     idea_title=concepts.get('core_function', 'Your Idea'),
-                    competitors=new_competitors
+                    competitors=top_competitors
                 )
-                
+                print("Email sent successfully")
+        else:
+            print("No new competitors found above threshold - no email sent")
+
         logger.info(f"Scan complete for idea {idea_id}. Found {len(new_competitors)} new competitors.")
+        print(f"✅ Scan complete! Found {len(new_competitors)} competitors.")
 
     except Exception as e:
         logger.error(f"Scan failed for idea {idea_id}: {e}")

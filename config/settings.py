@@ -15,7 +15,12 @@ class Settings:
     SMTP_SERVER = "smtp.gmail.com"
     SMTP_PORT = 587
     SMTP_USER = "shaharisn1@gmail.com"
-    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
+    if SMTP_PASSWORD:
+        print(f"DEBUG: Loaded SMTP_PASSWORD: {SMTP_PASSWORD[:3]}***")
+    else:
+        print("DEBUG: SMTP_PASSWORD is None or Empty!")
+        
     RECIPIENT_EMAIL = "shaharisn1@gmail.com"
 
     # Scraping

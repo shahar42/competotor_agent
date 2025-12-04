@@ -19,112 +19,71 @@ An AI-powered system that validates if user invention ideas already exist by con
 ## Architecture Overview
 
 ```
-User Input → Concept Extraction → Multi-Source Search → Similarity Scoring → Daily Monitoring → Email Alerts
+User Input (API) → Concept Extraction (+ Negatives) → Multi-Source Search → Noise Filter → Similarity Scoring → Email Alerts (+ Feedback Links)
 ```
 
 ### Pipeline Flow
-1. **Onboarding** (bot.py) - User describes their idea
-2. **Concept Extraction** (llm/matcher.py) - Gemini extracts core function, features, keywords
-3. **Immediate Scan** - Searches all sources right away
-4. **Storage** (SQLite) - Saves idea + found competitors
-5. **Daily Monitoring** (scheduler/runner.py) - Runs at 9 AM daily
-6. **Email Notifications** - Alerts when new competitors found
+1. **Onboarding** (`POST /auth/signup`) - Creates User account
+2. **Submission** (`POST /ideas/submit`) - User submits idea text
+3. **Background Scan** (Async Task) - Immediate processing without blocking
+   - Extracts concepts AND "Negative Keywords" (to kill noise)
+   - Scrapes all sources (AliExpress, Google, Patents)
+   - **Filters Noise** (removes results matching negative keywords)
+   - Calculates Similarity (Gemini)
+4. **Notification** - Emails user with results + "Is this relevant?" links
+5. **Feedback Loop** (`GET /webhooks/feedback`) - User clicks Yes/No, training data is saved
 
 ## Project Structure
 
 ```
 agent_product_scanner/
-├── bot.py                 # Main CLI - onboarding flow
-├── main.py               # Entry point (bot or scheduler)
+├── api/                  # FastAPI Backend
+│   ├── main.py           # App entry point
+│   ├── routers/          # API Endpoints (auth, ideas, webhooks)
+│   └── services/         # Business Logic (scanner.py)
 ├── database/
-│   ├── connection.py     # SQLAlchemy setup (SQLite)
-│   └── models.py         # Idea & Competitor models
+│   ├── models.py         # User, Idea, Competitor models
+│   └── ...
 ├── llm/
-│   ├── client.py         # Gemini API wrapper
-│   └── matcher.py        # Concept extraction & similarity
-├── scrapers/
-│   ├── base_scraper.py   # Abstract scraper interface
-│   ├── registry.py       # Factory for all scrapers
-│   ├── aliexpress.py     # AliExpress search
-│   ├── kickstarter.py    # Kickstarter projects
-│   ├── serper.py         # Google via Serper API
-│   └── patents.py        # US Patents via PatentsView API
-├── scheduler/
-│   └── runner.py         # Daily job scheduler
+│   ├── matcher.py        # Concept extraction & similarity + Noise Filtering
+│   └── ...
+├── scrapers/             # Scraper modules (AliExpress, Serper, Patents)
 ├── notifications/
-│   └── email.py          # Email alerts
-└── config/
-    └── settings.py       # Configuration
-
-Database: idea_validator.db (SQLite)
+│   └── email.py          # Email Service (Dynamic templates)
+├── Dockerfile            # Python + Chrome (for Render deployment)
+└── requirements.txt
 ```
 
 ## Database Schema
 
+### Table: `users`
+- id, email, is_premium, created_at
+
 ### Table: `ideas`
-- id (PK)
-- user_description (TEXT) - Full idea description
-- extracted_concepts (TEXT) - JSON: {core_function, key_features, search_keywords, category}
-- created_at, last_checked (DATETIME)
+- id, user_id (FK), user_description
+- extracted_concepts (JSON)
+- negative_keywords (JSON) - *New: Terms to filter out*
 
 ### Table: `competitors`
-- id (PK)
-- idea_id (FK → ideas.id)
-- product_name, source (aliexpress/kickstarter/google/patents)
-- url, price (nullable)
-- similarity_score (0-100) - LLM-calculated match percentage
-- reasoning (TEXT) - Why LLM thinks it's similar
-- discovered_at (DATETIME)
+- id, idea_id, product_name, url, score, reasoning
+- is_relevant (Boolean) - *New: User feedback (True/False)*
+- feedback_at (DateTime)
 
 ## Key Components Explained
 
-### 1. Concept Extraction (llm/matcher.py)
-**ConceptMatcher.extract_concepts(user_description)**
-- Uses Gemini to parse user's idea
-- Returns structured JSON:
-  ```json
-  {
-    "core_function": "what it does",
-    "key_features": ["feature1", "feature2"],
-    "search_keywords": ["term1", "term2", "term3", "term4", "term5"],
-    "category": "product type"
-  }
-  ```
+### 1. Concept Extraction & Noise Control
+**ConceptMatcher.extract_concepts()** now asks Gemini for "Negative Keywords".
+*   *Example:* Idea="Cat Sleep Collar" -> Negatives=["Dog", "Shock", "Training"]
+*   **ConceptMatcher.filter_noise()** removes any scraped result containing these words *before* the LLM check.
 
-### 2. Similarity Scoring (llm/matcher.py)
-**ConceptMatcher.calculate_similarity(user_idea, competitor_product)**
-- Compares user idea vs found product
-- Returns:
-  ```json
-  {
-    "score": 85,  // 0-100 similarity
-    "reasoning": "why they match",
-    "user_advantage": "what makes user's idea unique"
-  }
-  ```
-- Threshold: 60+ = considered competitor
+### 2. Background Scanning Service (`api/services/scanner.py`)
+Orchestrates the entire pipeline asynchronously. It handles the complexities of opening/closing DB sessions for background tasks and ensures the user gets an immediate "Idea Received" response while the heavy scraping happens in the background.
 
-### 3. Multi-Source Scraping (scrapers/)
-**ScraperRegistry.get_all_scrapers()** returns:
-- **AliExpress** - Web scraping + Selenium
-- **Kickstarter** - Active projects search
-- **Serper** - Google search via API with product URL filtering (excludes blogs/articles)
-- **Patents** - US Patents via PatentsView API (completely free, no rate limits)
-
-All inherit from `BaseScraper` with standard `.search(query)` method
-
-**Note**: Serper scraper includes smart filtering to return only actual product pages, not blog articles or news sites. Patent scraper searches USPTO database for early-stage innovations. See detailed filtering logic in Scraper Implementation Notes below.
-
-### 4. Daily Scheduler (scheduler/runner.py)
-**DailyRunner.start()**
-- Runs every day at 9:00 AM
-- Checks all stored ideas
-- For each idea:
-  1. Search all sources with extracted keywords
-  2. Calculate similarity for each result
-  3. Save new competitors (≥60% match)
-  4. Send email if new competitors found
-  5. Update `last_checked` timestamp
+### 3. Email with Feedback Loop
+The email notification now includes:
+*   Detailed product match info.
+*   **Feedback Links**: "✅ Yes (Correct)" and "❌ No (False Positive)".
+*   These links hit the API to tag the data for future model fine-tuning.
 
 ## Usage & Commands
 
