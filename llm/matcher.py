@@ -16,17 +16,22 @@ class ConceptMatcher:
             clean = clean[:-3]
         return clean.strip()
 
-    def extract_concepts(self, user_description: str) -> dict:
-        """Extract searchable concepts from user's idea"""
+    def extract_concepts(self, user_description: str, image_base64: str = None) -> dict:
+        """Extract searchable concepts from user's idea (and optional image)"""
+        
+        prompt_intro = "Extract key concepts from this product idea for searching."
+        if image_base64:
+            prompt_intro += " I have provided an image of the concept along with the description. Use visual details from the image (materials, shape, mechanism) to enhance the search keywords."
+
         prompt = f"""
-Extract key concepts from this product idea for searching.
+{prompt_intro}
 
 Crucial: Identify "Negative Keywords". These are terms that often appear in similar BUT WRONG contexts.
 For example:
 - If idea is "Cat Sleep Collar", negative keywords: ["dog", "bark", "training", "shock"] (to avoid dog collars or shock collars)
 - If idea is "Surfboard Lamp", negative keywords: ["wax", "leash", "fin", "repair"] (to avoid surfboard accessories)
 
-Idea: {user_description}
+Idea Description: {user_description}
 
 Return JSON with:
 - core_function: what it does
@@ -37,7 +42,7 @@ Return JSON with:
 
 JSON only, no explanation.
 """
-        response = self.client.generate(prompt)
+        response = self.client.generate(prompt, image_base64=image_base64)
         return json.loads(self._clean_json_response(response))
 
     def filter_noise(self, results: list[dict], negative_keywords: list[str]) -> list[dict]:

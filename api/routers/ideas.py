@@ -8,18 +8,21 @@ from api.services.scanner import run_scan_for_idea
 
 router = APIRouter()
 
+from typing import Optional
+
 class IdeaSubmission(BaseModel):
     email: str
     description: str
     monitor_months: int = 0 # Options: 0 (off), 1, 3
+    image_base64: Optional[str] = None # New: Optional visual input
 
-def background_scan_wrapper(idea_id: int):
+def background_scan_wrapper(idea_id: int, image_base64: str = None):
     """
     Wrapper to ensure the background task has its own DB session.
     """
     db = SessionLocal()
     try:
-        run_scan_for_idea(idea_id, db)
+        run_scan_for_idea(idea_id, db, image_base64=image_base64)
     finally:
         db.close()
 
@@ -48,8 +51,8 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     db.commit()
     db.refresh(new_idea)
 
-    # Trigger background scan
-    background_tasks.add_task(background_scan_wrapper, new_idea.id)
+    # Trigger background scan - Pass image if provided
+    background_tasks.add_task(background_scan_wrapper, new_idea.id, submission.image_base64)
 
     return {
         "message": "Idea received. Scanning started.", 

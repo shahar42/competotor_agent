@@ -9,7 +9,7 @@ from notifications.email import EmailService
 
 logger = logging.getLogger(__name__)
 
-def run_scan_for_idea(idea_id: int, db: Session):
+def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
     """
     Orchestrates the full scanning process for a single idea:
     1. Extract concepts (if not already done)
@@ -31,7 +31,8 @@ def run_scan_for_idea(idea_id: int, db: Session):
         # 1. Concept Extraction (only if not already extracted)
         # Note: In MVP, we might re-extract if it's empty.
         if not idea.extracted_concepts:
-            concepts = matcher.extract_concepts(idea.user_description)
+            print(f"Extracting concepts for Idea #{idea.id} (Image provided: {bool(image_base64)})")
+            concepts = matcher.extract_concepts(idea.user_description, image_base64)
             idea.extracted_concepts = json.dumps(concepts)
             # Save negative keywords if available
             if 'negative_keywords' in concepts:
