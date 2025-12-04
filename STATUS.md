@@ -26,6 +26,7 @@
 - **Email Notifications**: Automated alerts with top 6 best matches
 - **Feedback Loop**: Users can mark results as relevant/irrelevant
 - **Weekly Smart Monitoring**: Optional 1-3 month tracking with low-storage "smart diff" (only alerts on new items)
+- **Multimodal Analysis**: Optional image input (sketches/photos) used by Gemini Vision to generate more accurate search keywords
 
 ---
 
@@ -56,7 +57,7 @@ All scrapers use **API-based requests** (no Selenium/Chrome needed):
 - **Patents**: SerpAPI
 
 #### 3. LLM Pipeline (`/llm/`)
-- **Concept Extraction**: Gemini extracts search keywords + negative keywords
+- **Concept Extraction**: Gemini 2.5 Flash (Multimodal) extracts search keywords + negative keywords from text description + optional user image.
 - **Noise Filtering**: Title-based keyword filtering (cheap pre-LLM filter)
 - **Similarity Matching**: Gemini compares user idea vs competitor (expensive, limited to top 15)
 
