@@ -1,6 +1,6 @@
 # Project Context: Idea Validator Agent
 
-**Last Updated:** December 3, 2025
+**Last Updated:** December 4, 2025
 **Repository:** https://github.com/shahar42/competotor_agent
 **Current Phase:** Phase 1 MVP (Email-First Architecture)
 
@@ -43,20 +43,27 @@ To prevent the LLM from finding irrelevant "sort-of-similar" products:
 
 ### C. Database Schema (`database/models.py`)
 *   **User:** `email`, `is_premium`.
-*   **Idea:** `user_id`, `negative_keywords` (stored JSON), `extracted_concepts`.
+*   **Idea:** `user_id`, `monitoring_enabled`, `monitoring_ends_at`, `negative_keywords` (stored JSON).
 *   **Competitor:** `is_relevant` (User feedback flag).
+*   **ScanHistory:** *New!* Stores MD5 hashes of processed URLs to prevent duplicate alerts and save storage space.
+
+### D. Weekly Smart Monitoring (Low-Storage)
+*   **User Choice:** 1 or 3 months monitoring duration.
+*   **Frequency:** Weekly scans (7-day interval check).
+*   **Optimization:** Uses `ScanHistory` (URL Hashes) to act as a "Seen Filter". Only *new* items trigger LLM and alerts.
+*   **Control:** Toggled via `ENABLE_MONITORING` env var.
 
 ## 4. Current Workflows
 
 ### 1. Signup & Submit
 *   `POST /auth/signup` -> Creates User.
-*   `POST /ideas/submit` -> Creates Idea -> Triggers `background_scan_wrapper`.
+*   `POST /ideas/submit` -> Creates Idea (with optional monitoring) -> Triggers `background_scan_wrapper`.
 
 ### 2. The Scan Pipeline (`api/services/scanner.py`)
 1.  Fetch Idea.
 2.  **Extract:** Get search terms + negative keywords.
 3.  **Search:** Run all scrapers.
-4.  **Filter:** Apply Negative Keywords (Quick Kill).
+4.  **Filter:** Apply Negative Keywords (Quick Kill) + **ScanHistory Hash Check** (Deduplication).
 5.  **Match:** Gemini calculates similarity score (0-100).
 6.  **Notify:** Send email via `EmailService` if > threshold.
 
@@ -66,11 +73,12 @@ GEMINI_API_KEY=...
 SERPER_API_KEY=...
 SMTP_USER=...
 SMTP_PASSWORD=...
-API_BASE_URL=... (e.g., https://idea-validator.onrender.com)
+API_BASE_URL=...
+ENABLE_MONITORING=true (Optional: Defaults to false)
 ```
 
 ## 6. Next Steps / Todo
 1.  **Deployment:** Push to Render and verify Docker build works.
 2.  **Feedback UI:** Create a simple HTML "Thank You" page for the feedback endpoint (currently returns raw JSON).
-3.  **Recurring Scans:** The `scheduler/runner.py` exists but isn't connected to the API yet. Needs to be run as a separate worker or integrated into FastAPI lifespan.
-4.  **Auth:** Implement magic links or simple token auth (currently just email).
+3.  **Auth:** Implement magic links or simple token auth (currently just email).
+4.  **Tests:** Add unit tests for the new `ScanHistory` and `DailyRunner` logic.

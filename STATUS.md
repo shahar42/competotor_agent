@@ -25,6 +25,7 @@
 - **Persistent Storage**: PostgreSQL database stores all ideas and competitors
 - **Email Notifications**: Automated alerts with top 6 best matches
 - **Feedback Loop**: Users can mark results as relevant/irrelevant
+- **Weekly Smart Monitoring**: Optional 1-3 month tracking with low-storage "smart diff" (only alerts on new items)
 
 ---
 
@@ -64,6 +65,11 @@ All scrapers use **API-based requests** (no Selenium/Chrome needed):
 - Each scan takes ~1-3 minutes (depending on LLM response time)
 - Results limited to top 15 products to prevent long processing
 
+#### 5. Weekly Monitoring Service
+- **Runner**: `scheduler/runner.py` (runs as separate thread if enabled)
+- **Frequency**: Weekly checks (every 7 days per idea)
+- **Optimization**: Uses `ScanHistory` table to store MD5 hashes of seen URLs. Prevents duplicate alerts and keeps DB usage minimal (critical for Render free tier).
+
 ---
 
 ## Deployment Information
@@ -98,6 +104,7 @@ SERPAPI_API_KEY=<serpapi-api-key>
 
 # App Config
 API_BASE_URL=https://idea-validator-api.onrender.com
+ENABLE_MONITORING=true # Optional: Defaults to false
 ```
 
 ### Database Configuration:
@@ -210,7 +217,6 @@ curl https://idea-validator-api.onrender.com/
 - User dashboard (view past scans)
 - Webhook integrations (Slack, Discord)
 - Export results to PDF/CSV
-- Scheduled re-scans (weekly/monthly)
 
 ---
 

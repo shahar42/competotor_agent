@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from database.connection import get_db, SessionLocal
 from database.models import User, Idea
 from api.services.scanner import run_scan_for_idea
@@ -10,6 +11,7 @@ router = APIRouter()
 class IdeaSubmission(BaseModel):
     email: str
     description: str
+    monitor_months: int = 0 # Options: 0 (off), 1, 3
 
 def background_scan_wrapper(idea_id: int):
     """
@@ -27,9 +29,20 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please signup first.")
 
+    # Calculate monitoring period
+    monitoring_enabled = False
+    monitoring_ends_at = None
+    
+    if submission.monitor_months > 0:
+        # Simple validation logic (could be expanded to check Premium status later)
+        monitoring_enabled = True
+        monitoring_ends_at = datetime.utcnow() + timedelta(days=30 * submission.monitor_months)
+
     new_idea = Idea(
         user_id=user.id,
-        user_description=submission.description
+        user_description=submission.description,
+        monitoring_enabled=monitoring_enabled,
+        monitoring_ends_at=monitoring_ends_at
     )
     db.add(new_idea)
     db.commit()
@@ -38,7 +51,11 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     # Trigger background scan
     background_tasks.add_task(background_scan_wrapper, new_idea.id)
 
-    return {"message": "Idea received. Scanning started.", "idea_id": new_idea.id}
+    return {
+        "message": "Idea received. Scanning started.", 
+        "idea_id": new_idea.id,
+        "monitoring": "Active" if monitoring_enabled else "Inactive"
+    }
 
 @router.get("/results/{email}")
 def get_user_results(email: str, db: Session = Depends(get_db)):

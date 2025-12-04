@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database.connection import Base
@@ -25,8 +25,28 @@ class Idea(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_checked = Column(DateTime, default=datetime.utcnow)
 
+    # Monitoring Fields
+    monitoring_enabled = Column(Boolean, default=False)
+    monitoring_ends_at = Column(DateTime, nullable=True)
+
     user = relationship("User", back_populates="ideas")
     competitors = relationship("Competitor", back_populates="idea")
+    scan_history = relationship("ScanHistory", back_populates="idea")
+
+class ScanHistory(Base):
+    """
+    Lightweight table to track what we've seen to prevent re-scanning/re-alerting.
+    Stores hashes of URLs/IDs to save space (Render 140MB limit).
+    """
+    __tablename__ = "scan_history"
+
+    id = Column(Integer, primary_key=True)
+    idea_id = Column(Integer, ForeignKey("ideas.id"))
+    url_hash = Column(String(32), index=True) # MD5 hash of the product URL
+    is_relevant = Column(Boolean, default=False) # Cache the LLM decision
+    last_seen = Column(DateTime, default=datetime.utcnow)
+
+    idea = relationship("Idea", back_populates="scan_history")
 
 class Competitor(Base):
     __tablename__ = "competitors"

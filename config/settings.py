@@ -16,10 +16,6 @@ class Settings:
     SMTP_PORT = 587
     SMTP_USER = "shaharisn1@gmail.com"
     SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
-    if SMTP_PASSWORD:
-        print(f"DEBUG: Loaded SMTP_PASSWORD: {SMTP_PASSWORD[:3]}***")
-    else:
-        print("DEBUG: SMTP_PASSWORD is None or Empty!")
         
     RECIPIENT_EMAIL = "shaharisn1@gmail.com"
 
@@ -38,5 +34,6 @@ class Settings:
 
     # App
     API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+    ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "false").lower() == "true"
 
 settings = Settings()
