@@ -26,7 +26,7 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     user = db.query(User).filter(User.email == submission.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please signup first.")
-    
+
     new_idea = Idea(
         user_id=user.id,
         user_description=submission.description
@@ -34,8 +34,40 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     db.add(new_idea)
     db.commit()
     db.refresh(new_idea)
-    
+
     # Trigger background scan
     background_tasks.add_task(background_scan_wrapper, new_idea.id)
-    
+
     return {"message": "Idea received. Scanning started.", "idea_id": new_idea.id}
+
+@router.get("/results/{email}")
+def get_user_results(email: str, db: Session = Depends(get_db)):
+    """Get all ideas and competitors for a user by email"""
+    from database.models import Competitor
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    ideas = db.query(Idea).filter(Idea.user_id == user.id).all()
+
+    results = []
+    for idea in ideas:
+        competitors = db.query(Competitor).filter(Competitor.idea_id == idea.id).order_by(Competitor.similarity_score.desc()).all()
+        results.append({
+            "idea_id": idea.id,
+            "description": idea.user_description,
+            "competitors": [
+                {
+                    "name": c.product_name,
+                    "url": c.url,
+                    "source": c.source,
+                    "price": c.price,
+                    "similarity_score": c.similarity_score,
+                    "reasoning": c.reasoning
+                }
+                for c in competitors
+            ]
+        })
+
+    return results
