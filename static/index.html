@@ -21,15 +21,18 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        .bg-brand {
-            background-color: #FEFFF5;
+        /* New Backgrounds */
+        .bg-gradient-subtle {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            min-height: 100vh;
         }
-        .bg-card-brand {
-            background-color: #FFFFDE;
+        .bg-card-blue {
+            background-color: #eff6ff; /* Very light blue (blue-50ish) */
+            border: 1px solid #dbeafe;
         }
     </style>
 </head>
-<body class="bg-brand text-gray-800 font-sans">
+<body class="bg-gradient-subtle text-gray-800 font-sans">
 
     <!-- Navbar -->
     <nav class="flex justify-between items-center py-6 px-8 max-w-6xl mx-auto">
@@ -39,7 +42,7 @@
 
     <!-- Hero Section -->
     <main class="max-w-4xl mx-auto mt-16 px-6 text-center">
-        <div class="inline-block bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-sm font-semibold mb-6">
+        <div class="inline-block bg-white border border-blue-100 text-blue-700 px-4 py-1 rounded-full text-sm font-semibold mb-6 shadow-sm">
             🚀 AI-Powered Market Research
         </div>
         <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight mb-6 text-gray-900">
@@ -51,7 +54,7 @@
         </p>
 
         <!-- The Form -->
-        <div class="bg-card-brand shadow-2xl rounded-2xl p-8 md:p-10 text-left max-w-2xl mx-auto border border-gray-100">
+        <div class="bg-card-blue shadow-xl rounded-2xl p-8 md:p-10 text-left max-w-2xl mx-auto">
             <form id="validatorForm" class="space-y-6">
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Your Email</label>
