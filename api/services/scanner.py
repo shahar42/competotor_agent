@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 from database.models import Idea, Competitor, User
 from llm.matcher import ConceptMatcher
@@ -29,12 +30,10 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
         scraper_registry = ScraperRegistry()
         
         # 1. Concept Extraction (only if not already extracted)
-        # Note: In MVP, we might re-extract if it's empty.
         if not idea.extracted_concepts:
             print(f"Extracting concepts for Idea #{idea.id} (Image provided: {bool(image_base64)})")
             concepts = matcher.extract_concepts(idea.user_description, image_base64)
             idea.extracted_concepts = json.dumps(concepts)
-            # Save negative keywords if available
             if 'negative_keywords' in concepts:
                 idea.negative_keywords = json.dumps(concepts['negative_keywords'])
             db.commit()
@@ -49,84 +48,99 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
             return
 
         # 2. Scrape Sources
-        # Combine keywords into a single string for scrapers that expect it
-        query = " ".join(search_keywords[:3]) # Use top 3 for broader search
-        
+        query = " ".join(search_keywords[:3]) 
         logger.info(f"Scanning for idea {idea_id} with query: {query}")
         
         all_scrapers = scraper_registry.get_all_scrapers()
         raw_results = []
 
-        for scraper_name, scraper in all_scrapers:
-            try:
-                print(f"Starting {scraper_name} scraper...")
-                results = scraper.search(query)
-                print(f"{scraper_name}: Found {len(results)} results")
-                # Tag results with source
-                for r in results:
-                    r['source'] = scraper_name
-                raw_results.extend(results)
-            except Exception as e:
-                logger.error(f"Scraper {scraper_name} failed: {e}")
-                print(f"ERROR in {scraper_name}: {e}")
+        # Run scrapers in parallel (Optional optimization, but good practice)
+        with ThreadPoolExecutor(max_workers=len(all_scrapers)) as executor:
+            futures = {executor.submit(scraper.search, query): name for name, scraper in all_scrapers}
+            
+            for future in as_completed(futures):
+                scraper_name = futures[future]
+                try:
+                    print(f"Starting {scraper_name} scraper...")
+                    results = future.result()
+                    print(f"{scraper_name}: Found {len(results)} results")
+                    for r in results:
+                        r['source'] = scraper_name
+                    raw_results.extend(results)
+                except Exception as e:
+                    logger.error(f"Scraper {scraper_name} failed: {e}")
+                    print(f"ERROR in {scraper_name}: {e}")
 
         # 3. Filter Noise
         clean_results = matcher.filter_noise(raw_results, negative_keywords)
         logger.info(f"Filtered {len(raw_results)} results down to {len(clean_results)}")
 
-        # Limit to top 15 products to prevent long processing times
+        # Limit to top 15 products
         MAX_PRODUCTS = 15
         if len(clean_results) > MAX_PRODUCTS:
             logger.info(f"Limiting to {MAX_PRODUCTS} products (had {len(clean_results)})")
             clean_results = clean_results[:MAX_PRODUCTS]
 
-        # 4. Calculate Similarity & Save
+        # 4. Calculate Similarity & Save (Parallelized)
         new_competitors = []
-        print(f"Starting similarity matching for {len(clean_results)} products...")
+        print(f"Starting parallel similarity matching for {len(clean_results)} products...")
 
-        for i, product in enumerate(clean_results, 1):
+        def process_product(product):
             # Skip if URL already exists for this idea (deduplication)
-            existing = db.query(Competitor).filter(
-                Competitor.idea_id == idea.id,
-                Competitor.url == product.get('url')
-            ).first()
+            # Note: DB check inside thread is tricky with shared session. 
+            # Ideally check before, but for MVP valid to just proceed or create new session.
+            # We will trust the outer loop filtered duplicates or just re-check later.
+            # Actually, let's just run the LLM check.
             
-            if existing:
-                continue
-
-            print(f"Matching product {i}/{len(clean_results)}: {product.get('name', 'Unknown')[:50]}...")
+            print(f"Matching: {product.get('name', 'Unknown')[:30]}...")
             similarity = matcher.calculate_similarity(idea.user_description, product)
-            
-            if similarity.get('score', 0) >= settings.SIMILARITY_THRESHOLD:
-                competitor = Competitor(
-                    idea_id=idea.id,
-                    product_name=product.get('name'),
-                    source=product.get('source'),
-                    url=product.get('url'),
-                    price=product.get('price'),
-                    similarity_score=similarity.get('score'),
-                    reasoning=similarity.get('reasoning'),
-                    is_relevant=None # Pending user feedback
-                )
-                db.add(competitor)
-                new_competitors.append(competitor)
-        
-        print(f"Saving {len(new_competitors)} new competitors to database...")
-        db.commit()
-        print("Database commit complete")
+            return product, similarity
+
+        # Use ThreadPool for LLM calls
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_product = {
+                executor.submit(process_product, p): p 
+                for p in clean_results 
+                # Pre-check DB to avoid unnecessary threads
+                if not db.query(Competitor).filter(Competitor.idea_id == idea.id, Competitor.url == p.get('url')).first()
+            }
+
+            for future in as_completed(future_to_product):
+                try:
+                    product, similarity = future.result()
+                    
+                    if similarity.get('score', 0) >= settings.SIMILARITY_THRESHOLD:
+                        competitor = Competitor(
+                            idea_id=idea.id,
+                            product_name=product.get('name'),
+                            source=product.get('source'),
+                            url=product.get('url'),
+                            price=product.get('price'),
+                            similarity_score=similarity.get('score'),
+                            reasoning=similarity.get('reasoning'),
+                            is_relevant=None
+                        )
+                        new_competitors.append(competitor)
+                except Exception as e:
+                    print(f"Error matching product: {e}")
+
+        # Save all at once
+        if new_competitors:
+            print(f"Saving {len(new_competitors)} new competitors to database...")
+            db.add_all(new_competitors)
+            db.commit()
+            print("Database commit complete")
 
         # 5. Notify User
         if new_competitors:
-            # Limit email to top 6 best matches (sorted by similarity score)
             MAX_EMAIL_COMPETITORS = 6
             top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
 
-            print(f"Preparing to send email with top {len(top_competitors)} of {len(new_competitors)} competitors...")
-            # Fetch user email
+            print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)
             if user:
                 email_service = EmailService()
-                print(f"Sending email to {user.email} with {len(top_competitors)} competitors...")
+                print(f"Sending email to {user.email}...")
                 email_service.send_alert(
                     to_email=user.email,
                     idea_title=concepts.get('core_function', 'Your Idea'),
@@ -141,4 +155,3 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
 
     except Exception as e:
         logger.error(f"Scan failed for idea {idea_id}: {e}")
-        # In production, we would retry or flag error
