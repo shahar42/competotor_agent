@@ -136,14 +136,19 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
             MAX_EMAIL_COMPETITORS = 6
             top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
             
-            # Generate Verdict
-            print("Generating AI Verdict...")
-            competitor_dicts = [
-                {"product_name": c.product_name, "similarity_score": c.similarity_score} 
-                for c in top_competitors
-            ]
-            verdict = matcher.generate_verdict(concepts.get('core_function', idea.user_description), competitor_dicts)
-            print(f"Verdict: {verdict}")
+            # Generate Verdict (If Enabled)
+            verdict = None
+            if settings.ENABLE_VERDICT:
+                try:
+                    print("Generating AI Verdict...")
+                    competitor_dicts = [
+                        {"product_name": c.product_name, "similarity_score": c.similarity_score} 
+                        for c in top_competitors
+                    ]
+                    verdict = matcher.generate_verdict(concepts.get('core_function', idea.user_description), competitor_dicts)
+                    print(f"Verdict: {verdict}")
+                except Exception as e:
+                    logger.error(f"Verdict generation failed: {e}")
 
             print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)

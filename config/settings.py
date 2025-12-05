@@ -35,5 +35,6 @@ class Settings:
     # App
     API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
     ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "false").lower() == "true"
+    ENABLE_VERDICT = os.getenv("ENABLE_VERDICT", "true").lower() == "true"
 
 settings = Settings()
