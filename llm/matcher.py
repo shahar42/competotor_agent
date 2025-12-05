@@ -128,5 +128,31 @@ Task:
 - If no real competitors: Recommend GO FOR IT.
 
 Output ONE sentence only. Start with "Verdict:".
+        """
+        return self.client.generate(prompt).strip()
+
+    def analyze_gaps(self, user_idea: str, competitor_name: str, complaints: list[str]) -> str:
+        """
+        Analyze competitor complaints and identify the market gap for the user's idea.
+        """
+        complaints_text = "\n".join([f"- {c}" for c in complaints[:10]])
+
+        prompt = f"""
+Market Gap Analysis:
+
+User's Idea: {user_idea}
+Competitor Product: {competitor_name}
+
+Public Complaints Found about Competitor:
+{complaints_text}
+
+Task:
+1. Identify the top 2-3 recurring problems/pain points from the complaints.
+2. Explain how the User's Idea solves (or fails to solve) these specific problems.
+3. Provide a "Marketing Hook" based on this gap.
+
+Output plain text, max 3 sentences.
+Format:
+"Competitors suffer from [Problem]. Your idea [Solves/Doesn't Solve] this by [Feature]. Opportunity: [Marketing Hook]."
 """
         return self.client.generate(prompt).strip()

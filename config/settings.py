@@ -36,5 +36,6 @@ class Settings:
     API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
     ENABLE_MONITORING = os.getenv("ENABLE_MONITORING", "false").lower() == "true"
     ENABLE_VERDICT = os.getenv("ENABLE_VERDICT", "true").lower() == "true"
+    ENABLE_GAP_HUNT = os.getenv("ENABLE_GAP_HUNT", "true").lower() == "true"
 
 settings = Settings()

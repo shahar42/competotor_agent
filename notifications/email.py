@@ -7,7 +7,7 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 class EmailService:
-    def send_alert(self, to_email: str, idea_title: str, competitors: list, verdict: str = None):
+    def send_alert(self, to_email: str, idea_title: str, competitors: list, verdict: str = None, gap_analysis: str = None):
         """
         Send alert with found competitors.
         competitors: List of Competitor SQLAlchemy objects
@@ -31,6 +31,15 @@ class EmailService:
                 {verdict}
             </div>
             """
+            
+        gap_html = ""
+        if gap_analysis:
+            gap_html = f"""
+            <div style="background-color: #eff6ff; color: #1e40af; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #bfdbfe;">
+                <h4 style="margin-top: 0; margin-bottom: 5px;">🎯 Gap Hunter Analysis</h4>
+                <p style="margin: 0; font-size: 0.95em;">{gap_analysis}</p>
+            </div>
+            """
 
         body = f"""
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
@@ -38,6 +47,7 @@ class EmailService:
             <p>We found new potential competitors for your idea: <strong>{idea_title}</strong></p>
             
             {verdict_html}
+            {gap_html}
             
             <hr>
             <ul style="list-style: none; padding: 0;">

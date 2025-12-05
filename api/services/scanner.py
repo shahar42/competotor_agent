@@ -149,6 +149,48 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                     print(f"Verdict: {verdict}")
                 except Exception as e:
                     logger.error(f"Verdict generation failed: {e}")
+            
+            # Gap Hunter (If Enabled)
+            gap_analysis = None
+            if settings.ENABLE_GAP_HUNT and top_competitors:
+                try:
+                    # Target the #1 competitor
+                    top_comp = top_competitors[0]
+                    print(f"Gap Hunter: Hunting complaints for {top_comp.product_name}...")
+                    
+                    # The "Hate Search" - Search Google for negative sentiment
+                    # We reuse the Google Scraper logic but with a specific query
+                    hate_query = f"{top_comp.product_name} review problem OR broken OR bad OR disappointed OR hate"
+                    
+                    # We need a quick way to search. We can instantiate SerperScraper directly or use registry.
+                    # For simplicity/robustness, let's use the SerperScraper directly if available.
+                    from scrapers.serper import SerperScraper
+                    serper = SerperScraper()
+                    
+                    # Search (limit to 5 results for speed)
+                    complaint_results = serper.search(hate_query)
+                    
+                    if complaint_results:
+                        # Extract snippets
+                        snippets = [r.get('description', '') or r.get('name', '') for r in complaint_results]
+                        # Filter empty snippets
+                        snippets = [s for s in snippets if s]
+                        
+                        if snippets:
+                            gap_analysis = matcher.analyze_gaps(
+                                user_idea=idea.user_description,
+                                competitor_name=top_comp.product_name,
+                                complaints=snippets
+                            )
+                            print(f"Gap Analysis: {gap_analysis}")
+                        else:
+                            print("Gap Hunter: No complaint snippets found.")
+                    else:
+                        print("Gap Hunter: No negative results found.")
+
+                except Exception as e:
+                    logger.error(f"Gap Hunter failed: {e}")
+                    print(f"Gap Hunter Error: {e}")
 
             print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)
@@ -159,7 +201,8 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                     to_email=user.email,
                     idea_title=concepts.get('core_function', 'Your Idea'),
                     competitors=top_competitors,
-                    verdict=verdict
+                    verdict=verdict,
+                    gap_analysis=gap_analysis
                 )
                 print("Email sent successfully")
         else:
