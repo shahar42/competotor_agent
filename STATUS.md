@@ -27,6 +27,7 @@
 - **Feedback Loop**: Users can mark results as relevant/irrelevant
 - **Weekly Smart Monitoring**: Optional 1-3 month tracking with low-storage "smart diff" (only alerts on new items)
 - **Multimodal Analysis**: Optional image input (sketches/photos) used by Gemini Vision to generate more accurate search keywords
+- **Gap Hunter**: AI analyzes negative reviews of top competitors to identify market opportunities and "pain points" your idea can solve.
 
 ---
 
@@ -60,6 +61,7 @@ All scrapers use **API-based requests** (no Selenium/Chrome needed):
 - **Concept Extraction**: Gemini 2.5 Flash (Multimodal) extracts search keywords + negative keywords from text description + optional user image.
 - **Noise Filtering**: Title-based keyword filtering (cheap pre-LLM filter)
 - **Similarity Matching**: Gemini compares user idea vs competitor (expensive, limited to top 15)
+- **Verdict & Gap Analysis**: Gemini generates a GO/NO-GO recommendation and performs a "Hate Search" analysis on competitor weaknesses.
 
 #### 4. Background Processing
 - Scans run via FastAPI `BackgroundTasks`
