@@ -104,3 +104,29 @@ JSON only.
 """
         response = self.client.generate(prompt)
         return json.loads(self._clean_json_response(response))
+
+    def generate_verdict(self, user_idea: str, competitors: list[dict]) -> str:
+        """
+        Generate a 1-sentence GO/NO-GO verdict based on the found competitors.
+        """
+        competitor_summary = "\n".join([
+            f"- {c['product_name']} ({c['similarity_score']}% match)" 
+            for c in competitors[:5]
+        ])
+
+        prompt = f"""
+Act as a brutal startup advisor. Based on the user's idea and the competitors found, give a 1-sentence verdict.
+
+User Idea: {user_idea}
+
+Found Competitors:
+{competitor_summary}
+
+Task:
+- If high similarity (>80%) matches exist: Recommend PIVOT or STOP.
+- If only low similarity exists: Recommend PROCEED but CAUTIOUSLY.
+- If no real competitors: Recommend GO FOR IT.
+
+Output ONE sentence only. Start with "Verdict:".
+"""
+        return self.client.generate(prompt).strip()

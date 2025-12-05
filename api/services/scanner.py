@@ -135,6 +135,15 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
         if new_competitors:
             MAX_EMAIL_COMPETITORS = 6
             top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
+            
+            # Generate Verdict
+            print("Generating AI Verdict...")
+            competitor_dicts = [
+                {"product_name": c.product_name, "similarity_score": c.similarity_score} 
+                for c in top_competitors
+            ]
+            verdict = matcher.generate_verdict(concepts.get('core_function', idea.user_description), competitor_dicts)
+            print(f"Verdict: {verdict}")
 
             print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)
@@ -144,7 +153,8 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                 email_service.send_alert(
                     to_email=user.email,
                     idea_title=concepts.get('core_function', 'Your Idea'),
-                    competitors=top_competitors
+                    competitors=top_competitors,
+                    verdict=verdict
                 )
                 print("Email sent successfully")
         else:

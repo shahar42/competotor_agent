@@ -7,17 +7,38 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 class EmailService:
-    def send_alert(self, to_email: str, idea_title: str, competitors: list):
+    def send_alert(self, to_email: str, idea_title: str, competitors: list, verdict: str = None):
         """
         Send alert with found competitors.
         competitors: List of Competitor SQLAlchemy objects
         """
         subject = f"🚨 New Competitors Found for: {idea_title}"
 
+        verdict_html = ""
+        if verdict:
+            # Color code the verdict based on keywords
+            bg_color = "#f3f4f6" # Gray default
+            text_color = "#333"
+            if "GO FOR IT" in verdict.upper() or "PROCEED" in verdict.upper():
+                bg_color = "#d1fae5" # Green
+                text_color = "#065f46"
+            elif "STOP" in verdict.upper() or "PIVOT" in verdict.upper():
+                bg_color = "#fee2e2" # Red
+                text_color = "#991b1b"
+            
+            verdict_html = f"""
+            <div style="background-color: {bg_color}; color: {text_color}; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; text-align: center; border: 1px solid {text_color};">
+                {verdict}
+            </div>
+            """
+
         body = f"""
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2>Idea Validator Report</h2>
             <p>We found new potential competitors for your idea: <strong>{idea_title}</strong></p>
+            
+            {verdict_html}
+            
             <hr>
             <ul style="list-style: none; padding: 0;">
         """
