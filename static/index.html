@@ -58,7 +58,7 @@
             <form id="validatorForm" class="space-y-6">
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
-                        <i class="fas fa-shield-alt text-green-600 mr-1"></i> Your Email
+                        <i id="emailShield" class="fas fa-shield-alt text-red-600 mr-1"></i> Your Email
                     </label>
                     <input type="email" id="email" required
                         class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
@@ -162,8 +162,22 @@
         const errorState = document.getElementById('errorState');
         const imageInput = document.getElementById('imageUpload');
         const imagePreview = document.getElementById('imagePreview');
+        const emailInput = document.getElementById('email');
+        const emailShield = document.getElementById('emailShield');
 
         let base64Image = null;
+
+        // Email validation with shield color change
+        emailInput.addEventListener('input', function() {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (emailRegex.test(emailInput.value)) {
+                emailShield.classList.remove('text-red-600');
+                emailShield.classList.add('text-green-600');
+            } else {
+                emailShield.classList.remove('text-green-600');
+                emailShield.classList.add('text-red-600');
+            }
+        });
 
         // Handle Image Selection
         imageInput.addEventListener('change', function(e) {
