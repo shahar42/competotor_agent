@@ -30,6 +30,10 @@ def on_startup():
 def read_root():
     return FileResponse('static/index.html')
 
+@app.get("/privacy.html")
+def privacy_page():
+    return FileResponse('static/privacy.html')
+
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(ideas.router, prefix="/ideas", tags=["Ideas"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
