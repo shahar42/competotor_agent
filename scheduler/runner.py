@@ -49,8 +49,10 @@ class DailyRunner:
                 new_competitors = self._scan_for_idea(idea, db)
                 if new_competitors:
                     print(f"Found {len(new_competitors)} new matches for Idea #{idea.id}")
-                    if idea.user and idea.user.email:
+                    if idea.user and idea.user.email and idea.user.is_active:
                         self.notifier.send_alert(idea.user.email, idea.user_description, new_competitors)
+                    elif idea.user and not idea.user.is_active:
+                        print(f"Skipping Idea #{idea.id} - User has unsubscribed")
                     else:
                         print(f"WARNING: Idea #{idea.id} has no user email associated.")
                 else:

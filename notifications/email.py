@@ -80,10 +80,14 @@ class EmailService:
             </li>
             """
 
-        body += """
+        unsubscribe_link = f"{settings.API_BASE_URL}/webhooks/unsubscribe?email={to_email}"
+
+        body += f"""
             </ul>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
             <p style="color: #999; font-size: 0.8em; text-align: center;">
-                You are receiving this because you subscribed to Idea Validator.
+                You are receiving this because you subscribed to Idea Validator.<br>
+                <a href="{unsubscribe_link}" style="color: #999; text-decoration: underline;">Unsubscribe from future emails</a>
             </p>
         </div>
         """

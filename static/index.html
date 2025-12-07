@@ -50,17 +50,22 @@
             <span class="gradient-text">before you build it.</span>
         </h1>
         <p class="text-xl text-gray-500 mb-12 max-w-2xl mx-auto">
-            Upload your product idea. Get a list of similar existing products with AI-powered similarity scores. See what's already out there before you invest time and money.
+            Upload your product idea and Get a list of similar existing products with AI-powered scan. dont invest time and money on a product that exists.
         </p>
 
         <!-- The Form -->
         <div class="bg-card-blue shadow-xl rounded-2xl p-8 md:p-10 text-left max-w-2xl mx-auto">
             <form id="validatorForm" class="space-y-6">
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Your Email</label>
-                    <input type="email" id="email" required 
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+                        <i class="fas fa-shield-alt text-green-600 mr-1"></i> Your Email
+                    </label>
+                    <input type="email" id="email" required
                         class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                         placeholder="you@example.com">
+                    <p class="text-xs text-gray-500 mt-1">
+                        <i class="fas fa-lock text-gray-400 mr-1"></i> Your data is secure. Read our <a href="/privacy.html" target="_blank" class="text-blue-600 hover:underline">Privacy Policy</a>
+                    </p>
                 </div>
                 <div>
                     <label for="idea" class="block text-sm font-medium text-gray-700 mb-1">Describe your idea</label>
@@ -100,6 +105,7 @@
 
                 <button type="submit" id="submitBtn"
                     class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg transition transform hover:scale-[1.02] flex justify-center items-center">
+                    <i class="fas fa-lock mr-2"></i>
                     <span>Scan Market Now</span>
                     <i class="fas fa-arrow-right ml-2"></i>
                 </button>
@@ -140,6 +146,9 @@
     <!-- Footer -->
     <footer class="mt-24 py-12 border-t border-gray-200 text-center text-gray-500 text-sm">
         <p>&copy; 2025 Idea Validator. Built with Gemini AI.</p>
+        <p class="mt-2">
+            <a href="/privacy.html" class="hover:text-blue-600 underline">Privacy Policy</a>
+        </p>
     </footer>
 
     <script>
