@@ -206,7 +206,15 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                 )
                 print("Email sent successfully")
         else:
-            print("No new competitors found above threshold - no email sent")
+            print("No competitors found - sending 'no matches' email")
+            user = db.query(User).get(idea.user_id)
+            if user:
+                email_service = EmailService()
+                email_service.send_no_matches_email(
+                    to_email=user.email,
+                    idea_title=concepts.get('core_function', 'Your Idea')
+                )
+                print("No-matches email sent successfully")
 
         logger.info(f"Scan complete for idea {idea_id}. Found {len(new_competitors)} new competitors.")
         print(f"✅ Scan complete! Found {len(new_competitors)} competitors.")

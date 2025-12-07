@@ -7,6 +7,58 @@ from config.settings import settings
 logger = logging.getLogger(__name__)
 
 class EmailService:
+    def send_no_matches_email(self, to_email: str, idea_title: str):
+        """Send email when no competitors are found"""
+        subject = f"✅ Good News: No Similar Products Found for '{idea_title}'"
+
+        unsubscribe_link = f"{settings.API_BASE_URL}/webhooks/unsubscribe?email={to_email}"
+
+        body = f"""
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Great News!</h2>
+            <p>We scanned AliExpress, Kickstarter, Google Shopping, and US Patents for products similar to:</p>
+            <p style="background: #f3f4f6; padding: 15px; border-radius: 8px; font-style: italic;">"{idea_title}"</p>
+
+            <div style="background-color: #d1fae5; color: #065f46; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #065f46;">
+                <h3 style="margin: 0;">🎉 No Similar Products Found!</h3>
+                <p style="margin: 10px 0 0 0;">Your idea appears to be unique in our search.</p>
+            </div>
+
+            <p><strong>What this means:</strong></p>
+            <ul>
+                <li>No exact matches found in major marketplaces</li>
+                <li>Your concept may have market opportunity</li>
+                <li>Consider doing additional manual research to be sure</li>
+            </ul>
+
+            <p style="color: #666; font-size: 0.9em; margin-top: 30px;">
+                <strong>Note:</strong> This doesn't guarantee no competition exists - just that we didn't find close matches in our automated scan.
+            </p>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #999; font-size: 0.8em; text-align: center;">
+                You are receiving this because you subscribed to Idea Validator.<br>
+                <a href="{unsubscribe_link}" style="color: #999; text-decoration: underline;">Unsubscribe from future emails</a>
+            </p>
+        </div>
+        """
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = settings.SMTP_USER
+        msg["To"] = to_email
+        msg.attach(MIMEText(body, "html"))
+
+        try:
+            server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            logger.info(f"No-matches email sent to {to_email}")
+        except Exception as e:
+            logger.error(f"Email error: {e}")
+
     def send_alert(self, to_email: str, idea_title: str, competitors: list, verdict: str = None, gap_analysis: str = None):
         """
         Send alert with found competitors.
