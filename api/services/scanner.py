@@ -133,7 +133,7 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
 
         # 5. Notify User
         if new_competitors:
-            MAX_EMAIL_COMPETITORS = 6
+            MAX_EMAIL_COMPETITORS = 4
             top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
             
             # Generate Verdict (If Enabled)

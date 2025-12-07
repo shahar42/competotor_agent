@@ -32,18 +32,21 @@ def submit_idea(submission: IdeaSubmission, background_tasks: BackgroundTasks, d
     if not user:
         raise HTTPException(status_code=404, detail="User not found. Please signup first.")
 
-    # Rate Limiting: 3 requests per 20 minutes
-    twenty_minutes_ago = datetime.utcnow() - timedelta(minutes=20)
-    recent_ideas = db.query(Idea).filter(
-        Idea.user_id == user.id,
-        Idea.created_at >= twenty_minutes_ago
-    ).count()
+    # Rate Limiting: 3 requests per 20 minutes (skip for admin)
+    ADMIN_EMAILS = ["shaharisn1@gmail.com"]
 
-    if recent_ideas >= 3:
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded. You can submit 3 ideas per 20 minutes. Please try again later."
-        )
+    if submission.email not in ADMIN_EMAILS:
+        twenty_minutes_ago = datetime.utcnow() - timedelta(minutes=20)
+        recent_ideas = db.query(Idea).filter(
+            Idea.user_id == user.id,
+            Idea.created_at >= twenty_minutes_ago
+        ).count()
+
+        if recent_ideas >= 3:
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. You can submit 3 ideas per 20 minutes. Please try again later."
+            )
 
     # Calculate monitoring period
     monitoring_enabled = False
