@@ -213,6 +213,10 @@
                 });
 
                 if (!submitRes.ok) {
+                    const errorData = await submitRes.json().catch(() => ({}));
+                    if (submitRes.status === 429) {
+                        throw new Error(errorData.detail || 'Rate limit exceeded. You can submit 3 ideas per 20 minutes.');
+                    }
                     throw new Error('Submission failed');
                 }
 
@@ -226,7 +230,7 @@
                 loadingState.classList.add('hidden');
                 form.classList.remove('hidden');
                 errorState.classList.remove('hidden');
-                document.getElementById('errorMessage').textContent = "Connection error. Please ensure the server is running.";
+                document.getElementById('errorMessage').textContent = error.message || "Connection error. Please ensure the server is running.";
             }
         });
     </script>
