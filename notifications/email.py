@@ -49,15 +49,12 @@ class EmailService:
         msg["To"] = to_email
         msg.attach(MIMEText(body, "html"))
 
-        try:
-            server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-            server.quit()
-            logger.info(f"No-matches email sent to {to_email}")
-        except Exception as e:
-            logger.error(f"Email error: {e}")
+        server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+        server.starttls()
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        logger.info(f"No-matches email sent to {to_email}")
 
     def send_alert(self, to_email: str, idea_title: str, competitors: list, verdict: str = None, gap_analysis: str = None):
         """
@@ -150,12 +147,9 @@ class EmailService:
         msg["To"] = to_email
         msg.attach(MIMEText(body, "html"))
 
-        try:
-            server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
-            server.starttls()
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-            server.quit()
-            logger.info(f"Email sent to {to_email}")
-        except Exception as e:
-            logger.error(f"Email error: {e}")
+        server = smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT)
+        server.starttls()
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        logger.info(f"Email sent to {to_email}")
