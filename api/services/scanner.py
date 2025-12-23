@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy.orm import Session
 from database.models import Idea, Competitor, User
@@ -87,17 +88,17 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
 
         def process_product(product):
             # Skip if URL already exists for this idea (deduplication)
-            # Note: DB check inside thread is tricky with shared session. 
+            # Note: DB check inside thread is tricky with shared session.
             # Ideally check before, but for MVP valid to just proceed or create new session.
             # We will trust the outer loop filtered duplicates or just re-check later.
             # Actually, let's just run the LLM check.
-            
+
             print(f"Matching: {product.get('name', 'Unknown')[:30]}...")
             similarity = matcher.calculate_similarity(idea.user_description, product)
             return product, similarity
 
         # Use ThreadPool for LLM calls
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             future_to_product = {
                 executor.submit(process_product, p): p 
                 for p in clean_results 
@@ -149,6 +150,7 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                     print(f"Verdict: {verdict}")
                 except Exception as e:
                     logger.error(f"Verdict generation failed: {e}")
+                    print(f"Verdict generation ERROR: {e}")
             
             # Gap Hunter (If Enabled)
             gap_analysis = None
