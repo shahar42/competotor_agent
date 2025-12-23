@@ -5,11 +5,30 @@ from config.settings import settings
 import base64
 import time
 import re
+import threading
 
 class GeminiClient:
+    # Global rate limiting: 5 req/min = 12s between requests
+    _last_request_time = 0
+    _rate_limit_lock = threading.Lock()
+    _min_request_interval = 12.0  # seconds
+
     def __init__(self):
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+
+    def _enforce_rate_limit(self):
+        """Ensure minimum time between API requests (thread-safe)"""
+        with self._rate_limit_lock:
+            current_time = time.time()
+            elapsed = current_time - GeminiClient._last_request_time
+
+            if elapsed < self._min_request_interval:
+                sleep_time = self._min_request_interval - elapsed
+                print(f"Rate limiting: waiting {sleep_time:.1f}s before next request...")
+                time.sleep(sleep_time)
+
+            GeminiClient._last_request_time = time.time()
 
     def generate(self, prompt: str, image_base64: str = None) -> str:
         """
@@ -46,6 +65,9 @@ class GeminiClient:
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                # Enforce rate limit before making request
+                self._enforce_rate_limit()
+
                 response = self.model.generate_content(contents)
                 return response.text
             except ResourceExhausted as e:
