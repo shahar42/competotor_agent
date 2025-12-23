@@ -13,9 +13,10 @@ class GeminiClient:
     _rate_limit_lock = threading.Lock()
     _min_request_interval = 13.0  # seconds
 
-    def __init__(self):
+    def __init__(self, model_name=None):
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        self.model_name = model_name or settings.GEMINI_MODEL
+        self.model = genai.GenerativeModel(self.model_name)
 
     def _enforce_rate_limit(self):
         """Ensure minimum time between API requests (thread-safe)"""

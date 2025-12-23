@@ -1,9 +1,13 @@
 import json
 from llm.client import GeminiClient
+from config.settings import settings
 
 class ConceptMatcher:
     def __init__(self):
+        # Use full model for important reasoning tasks
         self.client = GeminiClient()
+        # Use lite model for bulk similarity matching (better rate limits)
+        self.lite_client = GeminiClient(model_name=settings.GEMINI_LITE_MODEL)
 
     def _clean_json_response(self, response: str) -> str:
         """Remove markdown code fences from LLM JSON responses"""
@@ -81,6 +85,7 @@ JSON only, no explanation.
         """
         Compare user's idea to found product
         Returns: {score: 0-100, reasoning: str}
+        Uses lite model for better rate limits (bulk matching task)
         """
         prompt = f"""
 Compare this invention idea to an existing product:
@@ -102,7 +107,7 @@ Respond with JSON:
 
 JSON only.
 """
-        response = self.client.generate(prompt)
+        response = self.lite_client.generate(prompt)  # Use lite model for bulk matching
         return json.loads(self._clean_json_response(response))
 
     def generate_verdict(self, user_idea: str, competitors: list[dict]) -> str:

@@ -10,6 +10,7 @@ class Settings:
     # LLM
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-preview-09-2025")
+    GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-2.5-flash-lite")  # For bulk matching
 
     # Email
     SMTP_SERVER = "smtp.gmail.com"
