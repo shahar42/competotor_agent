@@ -8,10 +8,10 @@ import re
 import threading
 
 class GeminiClient:
-    # Global rate limiting: 5 req/min = 12s between requests
+    # Global rate limiting: 5 req/min = 13s between requests (safety margin)
     _last_request_time = 0
     _rate_limit_lock = threading.Lock()
-    _min_request_interval = 12.0  # seconds
+    _min_request_interval = 13.0  # seconds
 
     def __init__(self):
         genai.configure(api_key=settings.GEMINI_API_KEY)
