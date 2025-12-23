@@ -84,6 +84,7 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
 
         # 4. Calculate Similarity & Save (Parallelized)
         new_competitors = []
+        matching_failures = []
         print(f"Starting parallel similarity matching for {len(clean_results)} products...")
 
         def process_product(product):
@@ -100,8 +101,8 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
         # Use ThreadPool for LLM calls
         with ThreadPoolExecutor(max_workers=1) as executor:
             future_to_product = {
-                executor.submit(process_product, p): p 
-                for p in clean_results 
+                executor.submit(process_product, p): p
+                for p in clean_results
                 # Pre-check DB to avoid unnecessary threads
                 if not db.query(Competitor).filter(Competitor.idea_id == idea.id, Competitor.url == p.get('url')).first()
             }
@@ -109,7 +110,7 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
             for future in as_completed(future_to_product):
                 try:
                     product, similarity = future.result()
-                    
+
                     if similarity.get('score', 0) >= settings.SIMILARITY_THRESHOLD:
                         competitor = Competitor(
                             idea_id=idea.id,
@@ -123,7 +124,17 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                         )
                         new_competitors.append(competitor)
                 except Exception as e:
+                    error_msg = str(e)
                     print(f"Error matching product: {e}")
+                    matching_failures.append(error_msg)
+
+                    # Check if this is a rate limit error
+                    if "429" in error_msg or "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                        print("⚠️  RATE LIMIT DETECTED - Stopping further matching")
+                        # Cancel remaining futures to avoid wasting quota
+                        for f in future_to_product:
+                            f.cancel()
+                        break
 
         # Save all at once
         if new_competitors:
@@ -197,26 +208,52 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
             print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)
             if user:
-                email_service = EmailService()
-                print(f"Sending email to {user.email}...")
-                email_service.send_alert(
-                    to_email=user.email,
-                    idea_title=concepts.get('core_function', 'Your Idea'),
-                    competitors=top_competitors,
-                    verdict=verdict,
-                    gap_analysis=gap_analysis
-                )
-                print("Email sent successfully")
+                try:
+                    email_service = EmailService()
+                    print(f"Sending email to {user.email}...")
+                    email_service.send_alert(
+                        to_email=user.email,
+                        idea_title=concepts.get('core_function', 'Your Idea'),
+                        competitors=top_competitors,
+                        verdict=verdict,
+                        gap_analysis=gap_analysis
+                    )
+                    print("Email sent successfully")
+                except Exception as e:
+                    logger.error(f"Failed to send competitor alert email: {e}")
+                    print(f"❌ Email failed: {e}")
+                    # Don't raise - email failure shouldn't invalidate the scan results
         else:
+            # Check if scan actually succeeded or failed due to errors
+            if matching_failures:
+                # Scan failed - check if it's a rate limit issue
+                has_rate_limit_error = any("429" in err or "quota" in err.lower() or "rate limit" in err.lower() for err in matching_failures)
+
+                if has_rate_limit_error:
+                    error_msg = f"❌ Scan failed due to API rate limits. Processed 0/{len(clean_results)} products before hitting quota."
+                    print(error_msg)
+                    logger.error(error_msg)
+                    raise Exception(f"Rate limit exceeded - could not complete scan. Please try again later or upgrade API tier.")
+                else:
+                    error_msg = f"⚠️  Scan partially failed. {len(matching_failures)} products failed to match."
+                    print(error_msg)
+                    logger.warning(error_msg)
+                    # Fall through to send "no matches" since we did process some products
+
             print("No competitors found - sending 'no matches' email")
             user = db.query(User).get(idea.user_id)
             if user:
-                email_service = EmailService()
-                email_service.send_no_matches_email(
-                    to_email=user.email,
-                    idea_title=concepts.get('core_function', 'Your Idea')
-                )
-                print("No-matches email sent successfully")
+                try:
+                    email_service = EmailService()
+                    email_service.send_no_matches_email(
+                        to_email=user.email,
+                        idea_title=concepts.get('core_function', 'Your Idea')
+                    )
+                    print("No-matches email sent successfully")
+                except Exception as e:
+                    logger.error(f"Failed to send no-matches email: {e}")
+                    print(f"❌ Email failed: {e}")
+                    # Don't raise - email failure shouldn't crash the scan
 
         logger.info(f"Scan complete for idea {idea_id}. Found {len(new_competitors)} new competitors.")
         print(f"✅ Scan complete! Found {len(new_competitors)} competitors.")
