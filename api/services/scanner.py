@@ -21,70 +21,87 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
     5. Save results
     6. Send email if new competitors found
     """
+    logger.info(f"{'='*80}")
+    logger.info(f"[SCAN_START] Idea #{idea_id}")
+    logger.info(f"{'='*80}")
+
     try:
         idea = db.query(Idea).get(idea_id)
         if not idea:
-            logger.error(f"Idea {idea_id} not found")
+            logger.error(f"[SCAN_ERROR] Idea {idea_id} not found")
             return
 
+        logger.info(f"[IDEA] {idea.user_description[:150]}...")
         matcher = ConceptMatcher()
         scraper_registry = ScraperRegistry()
-        
+
         # 1. Concept Extraction (only if not already extracted)
         if not idea.extracted_concepts:
+            logger.info(f"[CONCEPTS] Extracting concepts (Image: {bool(image_base64)})")
             print(f"Extracting concepts for Idea #{idea.id} (Image provided: {bool(image_base64)})")
             concepts = matcher.extract_concepts(idea.user_description, image_base64)
             idea.extracted_concepts = json.dumps(concepts)
             if 'negative_keywords' in concepts:
                 idea.negative_keywords = json.dumps(concepts['negative_keywords'])
             db.commit()
+            logger.info(f"[CONCEPTS] Extracted: {list(concepts.keys())}")
         else:
             concepts = json.loads(idea.extracted_concepts)
+            logger.info(f"[CONCEPTS] Using cached concepts")
 
         search_keywords = concepts.get('search_keywords', [])
         negative_keywords = concepts.get('negative_keywords', [])
-        
+
+        logger.info(f"[KEYWORDS] Search: {search_keywords}")
+        logger.info(f"[KEYWORDS] Negative: {negative_keywords}")
+
         if not search_keywords:
-            logger.warning(f"No search keywords for idea {idea_id}")
+            logger.warning(f"[SCAN_ABORT] No search keywords for idea {idea_id}")
             return
 
         # 2. Scrape Sources
-        query = " ".join(search_keywords[:3]) 
-        logger.info(f"Scanning for idea {idea_id} with query: {query}")
+        query = " ".join(search_keywords[:3])
+        logger.info(f"[SCRAPE] Query: '{query}'")
         
         all_scrapers = scraper_registry.get_all_scrapers()
         raw_results = []
 
+        logger.info(f"[SCRAPE] Running {len(all_scrapers)} scrapers in parallel")
+
         # Run scrapers in parallel (Optional optimization, but good practice)
         with ThreadPoolExecutor(max_workers=len(all_scrapers)) as executor:
             futures = {executor.submit(scraper.search, query): name for name, scraper in all_scrapers}
-            
+
             for future in as_completed(futures):
                 scraper_name = futures[future]
                 try:
+                    logger.info(f"[SCRAPE] {scraper_name} - Starting")
                     print(f"Starting {scraper_name} scraper...")
                     results = future.result()
+                    logger.info(f"[SCRAPE] {scraper_name} - Found {len(results)} results")
                     print(f"{scraper_name}: Found {len(results)} results")
                     for r in results:
                         r['source'] = scraper_name
                     raw_results.extend(results)
                 except Exception as e:
-                    logger.error(f"Scraper {scraper_name} failed: {e}")
+                    logger.error(f"[SCRAPE] {scraper_name} - FAILED: {e}")
                     print(f"ERROR in {scraper_name}: {e}")
 
         # 3. Filter Noise
+        logger.info(f"[FILTER] Total scraped: {len(raw_results)} products")
         clean_results = matcher.filter_noise(raw_results, negative_keywords)
-        logger.info(f"Filtered {len(raw_results)} results down to {len(clean_results)}")
+        logger.info(f"[FILTER] After noise removal: {len(clean_results)} products")
 
         # Limit to top 15 products
         MAX_PRODUCTS = 15
         if len(clean_results) > MAX_PRODUCTS:
-            logger.info(f"Limiting to {MAX_PRODUCTS} products (had {len(clean_results)})")
+            logger.info(f"[FILTER] Limiting to top {MAX_PRODUCTS} products (had {len(clean_results)})")
             clean_results = clean_results[:MAX_PRODUCTS]
 
         # 4. Calculate Similarity & Save (Parallelized)
         new_competitors = []
         matching_failures = []
+        logger.info(f"[MATCH] Starting similarity matching for {len(clean_results)} products")
         print(f"Starting parallel similarity matching for {len(clean_results)} products...")
 
         def process_product(product):
@@ -94,8 +111,11 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
             # We will trust the outer loop filtered duplicates or just re-check later.
             # Actually, let's just run the LLM check.
 
+            product_name = product.get('name', 'Unknown')[:50]
+            logger.info(f"[MATCH] Processing: {product_name}...")
             print(f"Matching: {product.get('name', 'Unknown')[:30]}...")
             similarity = matcher.calculate_similarity(idea.user_description, product)
+            logger.info(f"[MATCH] {product_name} - Score: {similarity.get('score', 0)}%")
             return product, similarity
 
         # Use ThreadPool for LLM calls
@@ -125,42 +145,51 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                         new_competitors.append(competitor)
                 except Exception as e:
                     error_msg = str(e)
+                    logger.error(f"[MATCH] Product matching failed: {e}")
                     print(f"Error matching product: {e}")
                     matching_failures.append(error_msg)
 
                     # Check if this is a rate limit error
                     if "429" in error_msg or "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                        logger.error(f"[MATCH] RATE LIMIT DETECTED - Stopping")
                         print("⚠️  RATE LIMIT DETECTED - Stopping further matching")
                         # Cancel remaining futures to avoid wasting quota
                         for f in future_to_product:
                             f.cancel()
                         break
 
+        logger.info(f"[MATCH] Completed: {len(new_competitors)} matches found, {len(matching_failures)} failures")
+
         # Save all at once
         if new_competitors:
+            logger.info(f"[DB] Saving {len(new_competitors)} new competitors")
             print(f"Saving {len(new_competitors)} new competitors to database...")
             db.add_all(new_competitors)
             db.commit()
+            logger.info(f"[DB] Commit successful")
             print("Database commit complete")
 
         # 5. Notify User
         if new_competitors:
             MAX_EMAIL_COMPETITORS = 4
             top_competitors = sorted(new_competitors, key=lambda x: x.similarity_score, reverse=True)[:MAX_EMAIL_COMPETITORS]
-            
+            logger.info(f"[EMAIL] Preparing email with {len(top_competitors)} top competitors")
+
             # Generate Verdict (If Enabled)
             verdict = None
             if settings.ENABLE_VERDICT:
                 try:
+                    logger.info(f"[VERDICT] Generating AI verdict")
                     print("Generating AI Verdict...")
                     competitor_dicts = [
-                        {"product_name": c.product_name, "similarity_score": c.similarity_score} 
+                        {"product_name": c.product_name, "similarity_score": c.similarity_score}
                         for c in top_competitors
                     ]
                     verdict = matcher.generate_verdict(concepts.get('core_function', idea.user_description), competitor_dicts)
+                    logger.info(f"[VERDICT] {verdict[:100]}...")
                     print(f"Verdict: {verdict}")
                 except Exception as e:
-                    logger.error(f"Verdict generation failed: {e}")
+                    logger.error(f"[VERDICT] Generation failed: {e}")
                     print(f"Verdict generation ERROR: {e}")
             
             # Gap Hunter (If Enabled)
@@ -169,8 +198,9 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                 try:
                     # Target the #1 competitor
                     top_comp = top_competitors[0]
+                    logger.info(f"[GAP_HUNT] Analyzing complaints for: {top_comp.product_name}")
                     print(f"Gap Hunter: Hunting complaints for {top_comp.product_name}...")
-                    
+
                     # The "Hate Search" - Search Google for negative sentiment
                     # We reuse the Google Scraper logic but with a specific query
                     hate_query = f"{top_comp.product_name} review problem OR broken OR bad OR disappointed OR hate"
@@ -195,21 +225,26 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                                 competitor_name=top_comp.product_name,
                                 complaints=snippets
                             )
+                            logger.info(f"[GAP_HUNT] Analysis complete: {gap_analysis[:100]}...")
                             print(f"Gap Analysis: {gap_analysis}")
                         else:
+                            logger.warning(f"[GAP_HUNT] No complaint snippets found")
                             print("Gap Hunter: No complaint snippets found.")
                     else:
+                        logger.warning(f"[GAP_HUNT] No negative results found")
                         print("Gap Hunter: No negative results found.")
 
                 except Exception as e:
-                    logger.error(f"Gap Hunter failed: {e}")
+                    logger.error(f"[GAP_HUNT] Failed: {e}")
                     print(f"Gap Hunter Error: {e}")
 
+            logger.info(f"[EMAIL] Preparing to send to user")
             print(f"Preparing email with top {len(top_competitors)} competitors...")
             user = db.query(User).get(idea.user_id)
             if user:
                 try:
                     email_service = EmailService()
+                    logger.info(f"[EMAIL] Sending to {user.email}")
                     print(f"Sending email to {user.email}...")
                     email_service.send_alert(
                         to_email=user.email,
@@ -218,9 +253,10 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                         verdict=verdict,
                         gap_analysis=gap_analysis
                     )
+                    logger.info(f"[EMAIL] Sent successfully")
                     print("Email sent successfully")
                 except Exception as e:
-                    logger.error(f"Failed to send competitor alert email: {e}")
+                    logger.error(f"[EMAIL] Failed to send competitor alert: {e}")
                     print(f"❌ Email failed: {e}")
                     # Don't raise - email failure shouldn't invalidate the scan results
         else:
@@ -255,8 +291,12 @@ def run_scan_for_idea(idea_id: int, db: Session, image_base64: str = None):
                     print(f"❌ Email failed: {e}")
                     # Don't raise - email failure shouldn't crash the scan
 
-        logger.info(f"Scan complete for idea {idea_id}. Found {len(new_competitors)} new competitors.")
+        logger.info(f"{'='*80}")
+        logger.info(f"[SCAN_COMPLETE] Idea #{idea_id} - Found {len(new_competitors)} new competitors")
+        logger.info(f"{'='*80}")
         print(f"✅ Scan complete! Found {len(new_competitors)} competitors.")
 
     except Exception as e:
-        logger.error(f"Scan failed for idea {idea_id}: {e}")
+        logger.error(f"{'='*80}")
+        logger.error(f"[SCAN_FAILED] Idea #{idea_id}: {e}")
+        logger.error(f"{'='*80}")

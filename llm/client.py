@@ -26,7 +26,7 @@ class GeminiClient:
 
             if elapsed < self._min_request_interval:
                 sleep_time = self._min_request_interval - elapsed
-                print(f"Rate limiting: waiting {sleep_time:.1f}s before next request...")
+                print(f"[RATE_LIMIT] Waiting {sleep_time:.1f}s before next {self.model_name} request")
                 time.sleep(sleep_time)
 
             GeminiClient._last_request_time = time.time()
@@ -69,7 +69,9 @@ class GeminiClient:
                 # Enforce rate limit before making request
                 self._enforce_rate_limit()
 
+                print(f"[API_CALL] Calling {self.model_name} (attempt {attempt + 1}/{max_retries})")
                 response = self.model.generate_content(contents)
+                print(f"[API_SUCCESS] {self.model_name} responded successfully")
                 return response.text
             except ResourceExhausted as e:
                 # Extract retry delay from error message
@@ -82,12 +84,17 @@ class GeminiClient:
                     # Fallback: free tier = 5 req/min = 12s minimum
                     retry_seconds = 15
 
+                # Check if it's a quota error (daily limit) vs rate limit (per-minute)
+                is_quota_error = "quota" in error_msg.lower() or "daily" in error_msg.lower()
+                error_type = "QUOTA_EXCEEDED" if is_quota_error else "RATE_LIMIT"
+
                 if attempt < max_retries - 1:
-                    print(f"Rate limit hit. Retrying in {retry_seconds:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                    print(f"[{error_type}] {self.model_name} - Retrying in {retry_seconds:.1f}s (attempt {attempt + 1}/{max_retries})")
                     time.sleep(retry_seconds)
                 else:
-                    print(f"Rate limit hit. Max retries reached.")
+                    print(f"[{error_type}] {self.model_name} - Max retries reached. Error: {error_msg[:200]}")
                     raise
             except Exception as e:
                 # Other errors - don't retry
+                print(f"[API_ERROR] {self.model_name} failed: {type(e).__name__}: {str(e)[:200]}")
                 raise
